@@ -4,57 +4,79 @@
 
 Java based Elf/Dwarf parser branched from peter-dwarf. [https://code.google.com/p/peter-dwarf/]
 
-The focus of this library is EMF integration. After parsing the .elf file you can use the objects for code generation or integrate into your DSL.
+How to use
+==========
+Now this project can be used via Maven.
 
-The core parser project is an eclipse plugin without any dependencies.
+build
+-----
+- git clone git@github.com:aykutkilic/bicirik-dwarf.git
+- cd bicirik-dwarf/com.bicirikdwarf
+- mvn install
 
-    var elf = new Elf32Context(buffer)
-    var dwarf = new Dwarf32Context(elf)
+adding to your project
+----------------------
+- navigate to your project folder
+- add new dependency to your project's pom.xml
+```
+<dependency>
+	<groupId>com.bicirikdwarf</groupId>
+	<artifactId>bicirikdwarf</artifactId>
+	<version>1.1.0</version>
+</dependency>
+```
+(check the newest version number before)
 
-For EMF conversion:
+example usage
+-------------
+This is a dummy example to parse the ELF/DWARF file and the address of the variable called "car".
+```
+package com.my.project.that.uses.bicirik;
 
-    var model = DwarfModelFactory::createModel(dwarf)
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
-Then you can traverse the model tree:
+import com.bicirikdwarf.dwarf.CompilationUnit;
+import com.bicirikdwarf.dwarf.DebugInfoEntry;
+import com.bicirikdwarf.dwarf.DwAtType;
+import com.bicirikdwarf.dwarf.Dwarf32Context;
+import com.bicirikdwarf.elf.Elf32Context;
 
-    model.eAllContents.filter(StructureType).forEach[do what ever with it]
-
-Here's a more detailed example:
-
-   	def void example(File elfFile, PrintWriter out) {
-		val fileChannel = new RandomAccessFile(elfFile, 'r').getChannel();
-		val buffer = fileChannel.map(FileChannel.MapMode::READ_ONLY, 0, fileChannel.size);
-
-		buffer.order(ByteOrder.LITTLE_ENDIAN)
-
-		val elf = new Elf32Context(buffer)
-		val dwarf = new Dwarf32Context(elf)
-		val model = DwarfModelFactory::createModel(dwarf)
-		model.eAllContents.filter(Variable).forEach[out.println('''«it.name» @ «if(it.location!=null) Integer::toHexString(it.location)»''')]
-		model.eAllContents.filter(StructureType).forEach[out.println(it.dumpStruct.toString)]
-	}
+public class MyClass {
+    private static final Path OUT_FILE_PATH = Paths.get("path/to/my/elf/file/main.elf");
+    
+    //print the address of the variable called "car"
+    public void main() throws IOException {
+        ByteBuffer elfBuf = getBufferFromFile(OUT_FILE_PATH);
+        Elf32Context elf = new Elf32Context(elfBuf);
+        Dwarf32Context dwarf = new Dwarf32Context(elf);
 	
-	def dumpStruct(CompositeType struct) '''
-		«switch(struct) {StructureType:'struct' UnionType:'union' default:'composite?'}» «struct.typedef?.name» {
-			«FOR m : struct.members»
-				«m.type.dumpType» «m.name»  @«m.dataMemberLocation»
-			«ENDFOR»
+	//Do what you want
+        for(CompilationUnit iCU : dwarf.getCompilationUnits())
+            for(DebugInfoEntry iDIE : iCU.getCompileUnit().getChildren())
+                if("car".equals(iDIE.getAttribValue(DwAtType.DW_AT_name))) {
+		    System.out.println("The address of variable car: " + iDIE.address);
+		    return;
 		}
-	'''
-	
-	def dispatch String dumpType(Type type) { type.toString }
-	def dispatch String dumpType(BaseType baseType) '''«baseType.name»<«baseType.encoding ?: 'void'»>'''
-	def dispatch String dumpType(Typedef typedef) '''«typedef.name»'''
-	def dispatch String dumpType(ArrayType arrayType) '''«arrayType.type.dumpType»«arrayType.subranges.map[it.dumpType].join»'''
-	def dispatch String dumpType(SubrangeType subRange) '''[«subRange.upperBound+1»]'''
-	def dispatch String dumpType(PointerType ptr) '''«ptr.type.dumpType» *'''
-	def dispatch String dumpType(ConstType const) '''const «const.type.dumpType»'''
-	def dispatch String dumpType(VolatileType vol) '''volatile «vol.type.dumpType»'''
-	def dispatch String dumpType(EnumerationType ^enum) '''enum «enum.name»'''
-	def dispatch String dumpType(StructureType struct) '''struct «struct.typedef?.name»'''
-	def dispatch String dumpType(UnionType union) '''union «union.typedef?.name»'''
-	def dispatch String dumpType(SubroutineType sub) '''(«sub.parameters.map[it.dump].join(',')») -> «sub.returnType.dumpType»'''
-	
-	def String dump(FormalParameter param) '''«param.type.dumpType» «param.name»'''
+    }
+    
+    //The steps in this function must be done before init Elf32Context
+    private static ByteBuffer getBufferFromFile(Path filePath) throws IOException {
+	try (RandomAccessFile randomAccessFile = new RandomAccessFile(filePath.toString(), "r")) {
+	    FileChannel fileChannel = randomAccessFile.getChannel();
+            long fileSize = fileChannel.size();
+            ByteBuffer byteBuffer = ByteBuffer.allocate((int) fileSize);
+            fileChannel.read(byteBuffer);
+            randomAccessFile.close();
+            byteBuffer.flip();
+            return byteBuffer;
+        }
+    }
+}
+```
 
-The parser is tested with GCC 4.9.3. Only C related DebugInfoEntry is converted to EMF model.
+The parser has been tested with GCC 4.9.3. and GHS compilers.
