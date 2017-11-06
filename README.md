@@ -29,7 +29,7 @@ adding to your project
 
 example usage
 -------------
-This is a dummy example to parse the ELF/DWARF file and the address of the variable called "car".
+This is a dummy example to parse the ELF/DWARF file and get the address of the Debugging Information Entry called "car".
 ```
 package com.my.project.that.uses.bicirik;
 
